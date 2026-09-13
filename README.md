@@ -2,7 +2,7 @@
 
 ## Introduction
 
-In this project we assemble a five-agent Claude Code team that designs, builds, and reviews a real-time stock portfolio dashboard — while picking up the market vocabulary you need along the way. No prior trading experience assumed.
+In this project I assemble a five-agent Claude Code team that designs, builds, and reviews a real-time stock portfolio dashboard. In the process, the agenta help pick up the market vocabulary and domain knowledge I need along the way. No prior trading experience, the agent team provides guidance.
 
 
 ## Claude Agent team
