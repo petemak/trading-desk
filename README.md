@@ -18,17 +18,17 @@ Subagents reset that cost — each one starts clean, reads only what its brief p
 
 Nine agents, all defined as flat files under .claude/agents/ — no nesting by module. This table is the map: which file, what it's responsible for, and where it sits in the run order (spelled out in full in the orchestration playbook).
 
-| Agent	                    | File	                     | Responsible for	                       | Runs          | 
----------------------------------------------------------------------------------------------------------------------
-| Project Setup	            | project-setup.md	         | deps.edn, skeleton, Tailwind, CLAUDE.md | 1st, alone    | 
-| State & Backend Architect	| state-backend-architect.md | DataScript schema, Component system, Pedestal/WS | 2nd, alone | 
-| Dashboard Engineer    	| dashboard-engineer.md	     | Module 2 — dashboard                    | 3rd, parallel | 
-| Trading Engineer	        | trading-engineer.md	     | Module 3 — trading	                   | 3rd, parallel | 
-| Market Intel Engineer  	| market-intel-engineer.md   | Module 4 — watchlist/news	           | 3rd, parallel | 
-| Ledger Engineer	        | ledger-engineer.md         | Module 5 — history	                   | 3rd, parallel |
-| Code Reviewer	            | code-reviewer.md	         | Code review pass — incl. Kaocha	       | 4th, parallel |
-| Design Reviewer	        | design-reviewer.md         | Design pass	                           | 4th, parallel |
-| Eval Agent                | eval-agent.md 	         | Evals                                   | 5th, alone    |
+| Agent	                    | File	                     | Responsible for	                                | Runs          |
+| ------------------------- | -------------------------- | ------------------------------------------------ | ------------- |
+| Project Setup	            | project-setup.md	         | deps.edn, skeleton, Tailwind, CLAUDE.md          | 1st, alone    |
+| State & Backend Architect	| state-backend-architect.md | DataScript schema, Component system, Pedestal/WS | 2nd, alone    |
+| Dashboard Engineer    	| dashboard-engineer.md	     | Module 2 — dashboard                             | 3rd, parallel |
+| Trading Engineer	        | trading-engineer.md	     | Module 3 — trading	                            | 3rd, parallel |
+| Market Intel Engineer  	| market-intel-engineer.md   | Module 4 — watchlist/news	                    | 3rd, parallel |
+| Ledger Engineer	        | ledger-engineer.md         | Module 5 — history	                            | 3rd, parallel |
+| Code Reviewer	            | code-reviewer.md	         | Code review pass — incl. Kaocha	                | 4th, parallel |
+| Design Reviewer	        | design-reviewer.md         | Design pass	                                    | 4th, parallel |
+| Eval Agent                | eval-agent.md 	         | Evals                                            | 5th, alone    |
 
 ##  Tech stack
 
