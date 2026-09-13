@@ -1,0 +1,6 @@
+{:http {:port #profile {:dev 8890
+                         :prod 8080}
+        :join? #profile {:dev false
+                          :prod true}}
+
+ :engine {:tick-ms 1000}}
