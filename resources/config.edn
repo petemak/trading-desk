@@ -3,4 +3,4 @@
         :join? #profile {:dev false
                           :prod true}}
 
- :engine {:tick-ms 1000}}
+ :engine {:tick-ms 5000}}
