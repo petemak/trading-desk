@@ -25,6 +25,28 @@ Entities:
 - `:history/{ticker,price,ts}`
 - `:app/selected-ticker` — on `:app/ui`.
 
+## Data validation (Malli)
+
+Shape/type validation is a separate concern from the DataScript
+schema above — DataScript enforces storage-level identity and
+cardinality, Malli enforces the shape and type of data at the
+boundaries where it enters the system. Schemas live in
+`src/cljc/desk/schema.cljc` (Config, Ticker, Order) so both the
+Clojure backend and the ClojureScript frontend require the same
+definitions instead of duplicating them.
+
+Validate at exactly three boundaries:
+
+- `config.edn` on system start.
+- Incoming order maps before the business-rule checks in
+  `validate-order`.
+- (optionally) WebSocket tick payloads before they're transacted
+  into DataScript.
+
+Use `(m/explain schema value)` + `malli.error/humanize` for error
+messages, never a bare `(m/validate ...)` boolean when the failure
+needs to be shown to a person.
+
 ## Persistence
 
 Serialize with `(pr-str @conn)` to `localStorage` key `"desk-db"`;
@@ -45,7 +67,8 @@ read back with
 ## Folder ownership
 
 - `src/clj/desk/{system,server,service,engine}.clj`,
-  `resources/config.edn`, `src/cljs/desk/{db,storage,ws}.cljs`
+  `resources/config.edn`, `src/cljc/desk/schema.cljc`,
+  `src/cljs/desk/{db,storage,ws}.cljs`
   -> **State & Backend Architect** only
 - `src/cljs/desk/views/dashboard.cljs` -> **Dashboard Engineer** only
 - `src/cljs/desk/views/trading.cljs` -> **Trading Engineer** only

@@ -1,14 +1,15 @@
-{:paths ["src/clj" "src/cljs" "resources"]
+{:paths ["src/clj" "src/cljs" "src/cljc" "resources"]
 
  :deps {org.clojure/clojure {:mvn/version "1.11.1"}
         org.clojure/clojurescript {:mvn/version "1.11.132"}
-        no.cjohansen/replicant {:mvn/version "2024.10.21"}
+        no.cjohansen/replicant {:mvn/version "2026.07.1"}
         datascript/datascript {:mvn/version "1.7.1"}
         com.stuartsierra/component {:mvn/version "1.1.0"}
-        juxt/aero {:mvn/version "1.1.6"}
+        aero/aero {:mvn/version "1.1.6"}
         io.pedestal/pedestal.service {:mvn/version "0.6.4"}
         io.pedestal/pedestal.jetty {:mvn/version "0.6.4"}
-        org.clojure/core.async {:mvn/version "1.6.681"}}
+        org.clojure/core.async {:mvn/version "1.6.681"}
+        metosin/malli {:mvn/version "0.16.4"}}
 
  :aliases {:cljs {:extra-deps {thheller/shadow-cljs {:mvn/version "2.28.10"}}}
            :run  {:main-opts ["-m" "desk.system"]}
