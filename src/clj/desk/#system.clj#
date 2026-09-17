@@ -29,6 +29,7 @@
   system in a malformed shape."
   [cfg]
   (if (m/validate schema/Config cfg)
+    cfg
     (let [errors (me/humanize (m/explain schema/Config cfg))]
       (throw (ex-info (str "Invalid config: " (pr-str errors))
                        {:errors errors :config cfg})))))
@@ -36,8 +37,8 @@
 (defn config
   "Load and validate config for `profile` (default `:dev`, or `DESK_ENV`
   when set)."
-  ([] (config (env-profile)))
-  ([profile] (validate-config (read-raw-config profile))))
+  ([] (config (env-profile))))
+([profile] (validate-config (read-raw-config profile)))
 
 (defn new-system
   ([] (new-system (env-profile)))

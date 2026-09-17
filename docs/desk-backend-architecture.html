@@ -1,0 +1,588 @@
+<title>Booting the Trading Desk</title>
+<meta name="description" content="How desk.system wires Config, Engine, and Pedestal into one running backend, and how a price tick travels from the engine's background thread to a browser over WebSocket.">
+<style>
+  :root{
+    --bg:#f8fafc;
+    --surface:#ffffff;
+    --surface-2:#f1f5f9;
+    --border:#dde4ec;
+    --text:#101728;
+    --text-dim:#5b6577;
+    --text-faint:#8792a3;
+    --accent:#0369a1;      /* pedestal / http */
+    --accent-soft:#e0f2fe;
+    --config:#a15c00;      /* config / validation gate */
+    --config-soft:#fdf1de;
+    --engine:#0f7a54;      /* engine / motion */
+    --engine-soft:#e3f5ee;
+    --code-bg:#0f172a;
+    --code-text:#dbe4f3;
+    --code-dim:#7b8aa8;
+    --code-kw:#7dd3fc;
+    --code-str:#a5d6a7;
+    --code-num:#fbbf8f;
+    --radius:10px;
+    --serif-mono:"IBM Plex Mono", "Space Mono", ui-monospace, monospace;
+    --sans:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#05080f;
+      --surface:#0d1424;
+      --surface-2:#111a2e;
+      --border:#22304a;
+      --text:#e7ecf5;
+      --text-dim:#9aa7bf;
+      --text-faint:#69768f;
+      --accent:#5fc4f7;
+      --accent-soft:#132a3c;
+      --config:#f0b458;
+      --config-soft:#2c2210;
+      --engine:#4fd8a8;
+      --engine-soft:#0f271f;
+      --code-bg:#050a14;
+      --code-text:#dbe4f3;
+      --code-dim:#5c6a86;
+      --code-kw:#7dd3fc;
+      --code-str:#9adca0;
+      --code-num:#f3b98a;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#05080f;
+    --surface:#0d1424;
+    --surface-2:#111a2e;
+    --border:#22304a;
+    --text:#e7ecf5;
+    --text-dim:#9aa7bf;
+    --text-faint:#69768f;
+    --accent:#5fc4f7;
+    --accent-soft:#132a3c;
+    --config:#f0b458;
+    --config-soft:#2c2210;
+    --engine:#4fd8a8;
+    --engine-soft:#0f271f;
+    --code-bg:#050a14;
+    --code-text:#dbe4f3;
+    --code-dim:#5c6a86;
+    --code-kw:#7dd3fc;
+    --code-str:#9adca0;
+    --code-num:#f3b98a;
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  .page{
+    max-width:800px;
+    margin:0 auto;
+    padding:64px 24px 96px;
+  }
+
+  .eyebrow{
+    font-family:var(--serif-mono);
+    font-size:12.5px;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    color:var(--accent);
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .eyebrow::before{
+    content:"";
+    width:22px;
+    height:1px;
+    background:var(--accent);
+    display:inline-block;
+  }
+  h1{
+    font-family:var(--serif-mono);
+    font-size:clamp(28px,4.4vw,40px);
+    line-height:1.15;
+    letter-spacing:-.01em;
+    margin:18px 0 14px;
+    text-wrap:balance;
+  }
+  .dek{
+    font-size:17px;
+    color:var(--text-dim);
+    max-width:62ch;
+    margin:0 0 36px;
+  }
+  .dek code{font-size:.92em;}
+
+  h2{
+    font-family:var(--serif-mono);
+    font-size:20px;
+    letter-spacing:-.01em;
+    margin:64px 0 6px;
+    padding-top:20px;
+    border-top:1px solid var(--border);
+    text-wrap:balance;
+  }
+  h2 .num{color:var(--text-faint); font-weight:400; margin-right:10px;}
+  .section-intro{color:var(--text-dim); max-width:66ch; margin:0 0 28px;}
+  p{max-width:66ch;}
+  p.tight{margin:10px 0 0;}
+
+  code, kbd{
+    font-family:var(--serif-mono);
+    font-size:.88em;
+    background:var(--surface-2);
+    border:1px solid var(--border);
+    border-radius:4px;
+    padding:.05em .38em;
+  }
+
+  /* ---- component cards ---- */
+  .cards{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:14px;
+    margin:22px 0 8px;
+  }
+  .card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:18px 18px 16px;
+    border-top:3px solid var(--role);
+  }
+  .card.config{--role:var(--config);}
+  .card.engine{--role:var(--engine);}
+  .card.pedestal{--role:var(--accent);}
+  .card .role{
+    font-family:var(--serif-mono);
+    font-size:11px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--role);
+  }
+  .card h3{
+    font-family:var(--serif-mono);
+    font-size:16.5px;
+    margin:6px 0 2px;
+  }
+  .card .file{font-size:12.5px; color:var(--text-faint); font-family:var(--serif-mono);}
+  .card ul{
+    margin:12px 0 0;
+    padding-left:16px;
+    font-size:13.5px;
+    color:var(--text-dim);
+  }
+  .card li{margin:4px 0;}
+  .card li b{color:var(--text); font-weight:600;}
+
+  /* ---- figures ---- */
+  figure{margin:26px 0 8px;}
+  .figure-frame{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:18px 14px;
+    overflow-x:auto;
+  }
+  .figure-frame svg{display:block; margin:0 auto; max-width:100%; height:auto;}
+  figcaption{
+    font-size:13px;
+    color:var(--text-faint);
+    margin-top:10px;
+    max-width:66ch;
+  }
+  figcaption b{color:var(--text-dim); font-weight:600;}
+
+  /* ---- code blocks ---- */
+  .snippet{
+    background:var(--code-bg);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    margin:18px 0;
+    overflow:hidden;
+  }
+  .snippet .label{
+    font-family:var(--serif-mono);
+    font-size:11.5px;
+    letter-spacing:.04em;
+    color:var(--code-dim);
+    padding:9px 16px;
+    border-bottom:1px solid rgba(255,255,255,.06);
+    display:flex;
+    justify-content:space-between;
+  }
+  .snippet pre{
+    margin:0;
+    padding:14px 18px 16px;
+    overflow-x:auto;
+    font-family:var(--serif-mono);
+    font-size:12.8px;
+    line-height:1.62;
+    color:var(--code-text);
+  }
+  .snippet code{background:none; border:none; padding:0; font-size:1em; color:inherit;}
+  .k{color:var(--code-kw);}
+  .s{color:var(--code-str);}
+  .n{color:var(--code-num); font-variant-numeric:tabular-nums;}
+  .c{color:var(--code-dim); font-style:italic;}
+
+  /* ---- boot steps strip ---- */
+  .steps{
+    display:flex;
+    flex-wrap:wrap;
+    gap:0;
+    margin:24px 0 6px;
+    counter-reset:step;
+  }
+  .step{
+    flex:1 1 150px;
+    position:relative;
+    padding:14px 16px 14px 0;
+  }
+  .step:not(:last-child)::after{
+    content:"→";
+    position:absolute;
+    right:-2px;
+    top:16px;
+    color:var(--text-faint);
+  }
+  .step .n-badge{
+    font-family:var(--serif-mono);
+    font-size:11px;
+    color:var(--accent);
+    display:block;
+    margin-bottom:5px;
+  }
+  .step .t{font-weight:600; font-size:14px;}
+  .step .d{font-size:12.5px; color:var(--text-dim); margin-top:3px;}
+
+  /* ---- reference table ---- */
+  table{
+    width:100%;
+    border-collapse:collapse;
+    margin:20px 0 8px;
+    font-size:13.5px;
+  }
+  th{
+    text-align:left;
+    font-family:var(--serif-mono);
+    font-size:11px;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    color:var(--text-faint);
+    font-weight:500;
+    padding:8px 14px;
+    border-bottom:1px solid var(--border);
+  }
+  td{
+    padding:10px 14px;
+    border-bottom:1px solid var(--border);
+    color:var(--text-dim);
+    vertical-align:top;
+  }
+  td:first-child, td code{color:var(--text);}
+  td code{white-space:nowrap;}
+  tr:last-child td{border-bottom:none;}
+  .tbl-wrap{overflow-x:auto;}
+
+  .pill{
+    display:inline-block;
+    font-family:var(--serif-mono);
+    font-size:11px;
+    padding:2px 8px;
+    border-radius:99px;
+    border:1px solid currentColor;
+  }
+  .pill.config{color:var(--config); background:var(--config-soft);}
+  .pill.engine{color:var(--engine); background:var(--engine-soft);}
+  .pill.pedestal{color:var(--accent); background:var(--accent-soft);}
+
+  footer{
+    margin-top:64px;
+    padding-top:20px;
+    border-top:1px solid var(--border);
+    font-size:12.5px;
+    color:var(--text-faint);
+  }
+
+  @media (max-width:620px){
+    .cards{grid-template-columns:1fr;}
+    .steps{flex-direction:column;}
+    .step:not(:last-child)::after{content:"↓"; right:auto; left:0; top:auto; bottom:-2px;}
+  }
+</style>
+
+<div class="page">
+
+  <div class="eyebrow">desk.system · server architecture</div>
+  <h1>How the trading desk backend boots, and how a price reaches the browser</h1>
+  <p class="dek">Three pieces live under <code>src/clj/desk</code>: a validated config map, a price-simulation <code>Engine</code>, and a <code>Pedestal</code> HTTP/WebSocket server. <code>desk.system/new-system</code> wires them together with <code>component/using</code>; this page walks through exactly how, and traces one tick from the engine's background thread out to a connected browser.</p>
+
+  <h2><span class="num">01</span>The three moving parts</h2>
+  <p class="section-intro">Only <code>Engine</code> and <code>Pedestal</code> are actual <code>component/Lifecycle</code> records. <code>Config</code> is a plain, already-validated map — Component treats any non-Lifecycle value as already started, so it needs no <code>start</code>/<code>stop</code> of its own.</p>
+
+  <div class="cards">
+    <div class="card config">
+      <div class="role">Not a component</div>
+      <h3>Config</h3>
+      <div class="file">desk.system / resources/config.edn</div>
+      <ul>
+        <li>Aero-loaded, profile-aware map</li>
+        <li>Validated once against <b>schema/Config</b> (Malli) before the system is even built</li>
+        <li>Throws <code>ex-info</code> with a humanized error on a bad shape — the system never starts malformed</li>
+      </ul>
+    </div>
+    <div class="card engine">
+      <div class="role">Lifecycle</div>
+      <h3>Engine</h3>
+      <div class="file">desk.engine / defrecord Engine</div>
+      <ul>
+        <li>Depends on <b>:config</b></li>
+        <li>Owns <code>prices</code>, <code>clients</code>, <code>running</code> atoms + one daemon <code>Thread</code></li>
+        <li>All four created in <code>start</code>, nilled in <code>stop</code> — no top-level state</li>
+      </ul>
+    </div>
+    <div class="card pedestal">
+      <div class="role">Lifecycle</div>
+      <h3>Pedestal</h3>
+      <div class="file">desk.server / defrecord Pedestal</div>
+      <ul>
+        <li>Depends on <b>:config</b> and <b>:engine</b></li>
+        <li>Owns <code>runtime</code> — the started Jetty server map</li>
+        <li>Routing + WebSocket wiring delegated to <code>desk.service</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <h2><span class="num">02</span>Wiring the dependency graph</h2>
+  <p class="section-intro"><code>component/using</code> doesn't just document a dependency — it tells Component both the <b>start order</b> (dependencies first) and what to inject: the started value at <code>:config</code> is merged into the engine record before its <code>start</code> runs, and both <code>:config</code> and <code>:engine</code> are merged into the pedestal record before <em>its</em> <code>start</code> runs.</p>
+
+  <figure>
+    <div class="figure-frame">
+      <svg viewBox="0 0 760 300" role="img" aria-label="Config feeds into Engine; both Config and Engine feed into Pedestal, which depends on both.">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+        <style>
+          .box{fill:var(--surface-2); stroke:var(--border); stroke-width:1;}
+          .lbl{font-family:'IBM Plex Mono',monospace; fill:var(--text);}
+          .sub{font-family:'IBM Plex Mono',monospace; fill:var(--text-faint); font-size:10.5px;}
+          .item{font-family:'IBM Plex Sans',sans-serif; fill:var(--text-dim); font-size:11.5px;}
+          .edge{fill:none; stroke:var(--text-faint); stroke-width:1.3; marker-end:url(#arrow);}
+          .edge-lbl{font-family:'IBM Plex Mono',monospace; fill:var(--text-faint); font-size:10.5px;}
+        </style>
+
+        <!-- Config box -->
+        <rect class="box" x="30" y="120" width="180" height="96" rx="8" style="stroke:var(--config)"/>
+        <text class="lbl" x="50" y="146" font-size="15">Config</text>
+        <text class="sub" x="50" y="161">plain map</text>
+        <text class="item" x="50" y="182">:http {:port :join?}</text>
+        <text class="item" x="50" y="199">:engine {:tick-ms}</text>
+
+        <!-- Engine box -->
+        <rect class="box" x="290" y="88" width="190" height="160" rx="8" style="stroke:var(--engine)"/>
+        <text class="lbl" x="310" y="114" font-size="15">Engine</text>
+        <text class="sub" x="310" y="129">Lifecycle</text>
+        <text class="item" x="310" y="152">prices atom</text>
+        <text class="item" x="310" y="171">clients atom (chan set)</text>
+        <text class="item" x="310" y="190">running atom</text>
+        <text class="item" x="310" y="209">background Thread</text>
+        <text class="item" x="310" y="230">tick every :tick-ms</text>
+
+        <!-- Pedestal box -->
+        <rect class="box" x="550" y="120" width="180" height="96" rx="8" style="stroke:var(--accent)"/>
+        <text class="lbl" x="570" y="146" font-size="15">Pedestal</text>
+        <text class="sub" x="570" y="161">Lifecycle</text>
+        <text class="item" x="570" y="182">runtime (Jetty)</text>
+        <text class="item" x="570" y="199">routes via desk.service</text>
+
+        <!-- Config -> Engine -->
+        <line class="edge" x1="212" y1="168" x2="286" y2="168"/>
+        <text class="edge-lbl" x="216" y="160">:config</text>
+
+        <!-- Engine -> Pedestal -->
+        <line class="edge" x1="482" y1="168" x2="546" y2="168"/>
+        <text class="edge-lbl" x="486" y="160">:engine</text>
+
+        <!-- Config -> Pedestal, arcing above Engine -->
+        <path class="edge" d="M 120 118 C 120 30, 640 30, 640 116"/>
+        <text class="edge-lbl" x="345" y="28" text-anchor="middle">:config</text>
+      </svg>
+    </div>
+    <figcaption><b>Figure 1.</b> <code>new-system</code>'s dependency graph. Engine is injected with the validated config; Pedestal is injected with both the config and the started engine, since <code>desk.service/service-map</code> needs the engine to register WebSocket clients against.</figcaption>
+  </figure>
+
+  <div class="snippet">
+    <div class="label"><span>desk/system.clj</span><span>new-system</span></div>
+    <pre><code><span class="k">(defn</span> new-system
+  ([] (new-system (env-profile)))
+  ([profile]
+   <span class="k">(component/system-map</span>
+    :config (config profile)
+    :engine <span class="k">(component/using</span> (engine/new-engine) [:config])
+    :pedestal <span class="k">(component/using</span> (server/new-server) [:config :engine])))<span class="k">)</span></code></pre>
+  </div>
+
+  <h2><span class="num">03</span>Boot sequence</h2>
+  <p class="section-intro"><code>-main</code> calls <code>component/start</code> on the system map above. Component topologically sorts the graph from Figure 1 and starts each node once its dependencies are running:</p>
+
+  <div class="steps">
+    <div class="step"><span class="n-badge">01</span><div class="t">Load + validate config</div><div class="d">Aero reads config.edn; <code>m/validate</code> against <code>schema/Config</code> — throws before the system map is even built if it fails</div></div>
+    <div class="step"><span class="n-badge">02</span><div class="t">Engine.start</div><div class="d">Creates 3 atoms + spawns the daemon price-loop thread</div></div>
+    <div class="step"><span class="n-badge">03</span><div class="t">Pedestal.start</div><div class="d">Builds the service map, wraps <code>/ws</code> via the engine, starts Jetty</div></div>
+    <div class="step"><span class="n-badge">04</span><div class="t">System running</div><div class="d"><code>:join?</code> in config decides whether <code>-main</code> blocks here</div></div>
+  </div>
+
+  <div class="snippet">
+    <div class="label"><span>desk/system.clj</span><span>fail-fast config validation</span></div>
+    <pre><code><span class="k">(defn</span> validate-config <span class="c">;; called before new-system exists</span>
+  [cfg]
+  <span class="k">(if</span> (m/validate schema/Config cfg)
+    cfg
+    <span class="k">(let</span> [errors (me/humanize (m/explain schema/Config cfg))]
+      <span class="k">(throw</span> (ex-info <span class="s">(str "Invalid config: " (pr-str errors))</span>
+                       {:errors errors :config cfg})))))</code></pre>
+  </div>
+
+  <h2><span class="num">04</span>Runtime: how one price tick reaches a browser</h2>
+  <p class="section-intro">Once running, the engine's thread and the WebSocket layer never call each other directly — they only ever touch the same <code>clients</code> atom of core.async channels, one per open socket.</p>
+
+  <figure>
+    <div class="figure-frame">
+      <svg viewBox="0 0 760 470" role="img" aria-label="Sequence: browser connects over WebSocket, the service registers it with the engine and sends a snapshot, then every tick-ms the engine broadcasts a new price tick directly to every registered client.">
+        <defs>
+          <marker id="arrow2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+        <style>
+          .lane{stroke:var(--border); stroke-width:1; stroke-dasharray:3 4;}
+          .lane-lbl{font-family:'IBM Plex Mono',monospace; font-size:12px; fill:var(--text);}
+          .lane-file{font-family:'IBM Plex Mono',monospace; font-size:10px; fill:var(--text-faint);}
+          .msg{fill:none; stroke:var(--text-dim); stroke-width:1.3; marker-end:url(#arrow2);}
+          .msg-hi{fill:none; stroke:var(--engine); stroke-width:1.6; marker-end:url(#arrow2);}
+          .msg-lbl{font-family:'IBM Plex Mono',monospace; font-size:10.5px; fill:var(--text-dim);}
+          .msg-lbl-hi{font-family:'IBM Plex Mono',monospace; font-size:10.5px; fill:var(--engine); font-weight:600;}
+          .loopbox{fill:var(--engine-soft); stroke:var(--engine); stroke-width:1; stroke-dasharray:2 3; opacity:.55;}
+          .looplbl{font-family:'IBM Plex Mono',monospace; font-size:10.5px; fill:var(--engine);}
+        </style>
+
+        <!-- lanes -->
+        <line class="lane" x1="110" y1="60" x2="110" y2="450"/>
+        <line class="lane" x1="390" y1="60" x2="390" y2="450"/>
+        <line class="lane" x1="660" y1="60" x2="660" y2="450"/>
+
+        <text class="lane-lbl" x="110" y="34" text-anchor="middle">Browser</text>
+        <text class="lane-file" x="110" y="48" text-anchor="middle">desk.ws (cljs)</text>
+
+        <text class="lane-lbl" x="390" y="34" text-anchor="middle">WS listener</text>
+        <text class="lane-file" x="390" y="48" text-anchor="middle">desk.service</text>
+
+        <text class="lane-lbl" x="660" y="34" text-anchor="middle">Engine thread</text>
+        <text class="lane-file" x="660" y="48" text-anchor="middle">desk.engine</text>
+
+        <!-- connect -->
+        <line class="msg" x1="110" y1="90" x2="390" y2="90"/>
+        <text class="msg-lbl" x="120" y="83">connect ws://…/ws</text>
+
+        <line class="msg" x1="390" y1="120" x2="660" y2="120"/>
+        <text class="msg-lbl" x="400" y="113">register-client! ch</text>
+
+        <line class="msg" x1="390" y1="150" x2="112" y2="150"/>
+        <text class="msg-lbl" x="140" y="143">put! {:type :snapshot :prices}</text>
+
+        <!-- loop box -->
+        <rect class="loopbox" x="470" y="185" width="255" height="220" rx="6"/>
+        <text class="looplbl" x="482" y="202">loop — every :tick-ms (5000ms)</text>
+
+        <text class="msg-lbl" x="482" y="228">Thread/sleep tick-ms</text>
+        <text class="msg-lbl" x="482" y="248">next = tick-prices(prices)</text>
+        <text class="msg-lbl" x="482" y="268">reset! prices next</text>
+
+        <line class="msg-hi" x1="660" y1="300" x2="112" y2="300"/>
+        <text class="msg-lbl-hi" x="150" y="293">broadcast! {:type :tick :prices :ts}</text>
+
+        <text class="msg-lbl" x="482" y="330">…sleeps tick-ms again</text>
+        <line class="msg-hi" x1="660" y1="360" x2="112" y2="360"/>
+        <text class="msg-lbl-hi" x="150" y="353">broadcast! {:type :tick …}</text>
+
+        <!-- disconnect -->
+        <line class="msg" x1="110" y1="420" x2="390" y2="420"/>
+        <text class="msg-lbl" x="128" y="413">socket closes</text>
+        <line class="msg" x1="390" y1="440" x2="660" y2="440"/>
+        <text class="msg-lbl" x="400" y="433">unregister-client! ch</text>
+      </svg>
+    </div>
+    <figcaption><b>Figure 2.</b> The WS listener only mediates connect/disconnect. Once registered, a client's channel is written to directly from the engine's own thread — the listener plays no part in the steady-state tick loop.</figcaption>
+  </figure>
+
+  <div class="snippet">
+    <div class="label"><span>desk/engine.clj</span><span>the loop that drives Figure 2's right lane</span></div>
+    <pre><code><span class="k">(defn-</span> run-loop! [{:keys [prices clients running tick-ms]}]
+  <span class="k">(while</span> @running
+    (Thread/sleep <span class="n">^long</span> tick-ms)
+    <span class="k">(when</span> @running
+      <span class="k">(let</span> [next (tick-prices @prices)]
+        (reset! prices next)
+        (broadcast! clients (pr-str {:type :tick
+                                      :prices next
+                                      :ts (System/currentTimeMillis)}))))))</code></pre>
+  </div>
+
+  <div class="snippet">
+    <div class="label"><span>desk/service.clj</span><span>connect / disconnect — the two arrows into the Engine lane</span></div>
+    <pre><code><span class="k">(fn</span> [_req _response _ws-map]
+  <span class="k">(let</span> [send-ch (atom nil)
+        cleanup! <span class="k">(fn</span> []
+                   <span class="k">(when-let</span> [ch @send-ch]
+                     (engine/unregister-client! engine ch)))]
+    <span class="k">(ws/make-ws-listener</span>
+     {:on-connect <span class="k">(ws/start-ws-connection</span>
+                   <span class="k">(fn</span> [_ws-session ch]
+                     (reset! send-ch ch)
+                     (engine/register-client! engine ch)
+                     (async/put! ch (pr-str {:type :snapshot
+                                              :prices (engine/snapshot engine)}))))
+      :on-close <span class="k">(fn</span> [_status-code _reason] (cleanup!))
+      :on-error <span class="k">(fn</span> [_cause] (cleanup!))})))</code></pre>
+  </div>
+
+  <h2><span class="num">05</span>Shutdown</h2>
+  <p class="section-intro">Component stops nodes in <em>reverse</em> dependency order — Pedestal first, then Engine, then the (no-op) Config — so nothing is left trying to write to a socket or channel that's already gone.</p>
+  <p class="tight" style="color:var(--text-dim); font-size:14.5px;"><code>Pedestal.stop</code> calls <code>http/stop</code> on the Jetty runtime and nils it. <code>Engine.stop</code> flips <code>running</code> to <code>false</code> and interrupts the sleeping thread — the loop notices on its next wake and exits — then nils all four fields, leaving nothing but an empty <code>Engine</code> record behind.</p>
+
+  <h2><span class="num">06</span>Quick reference</h2>
+  <div class="tbl-wrap">
+    <table>
+      <tr><th>Component</th><th>File</th><th>Depends on</th><th>Owns at runtime</th></tr>
+      <tr>
+        <td><span class="pill config">config</span></td>
+        <td><code>desk.system</code></td>
+        <td>—</td>
+        <td>a validated, immutable map</td>
+      </tr>
+      <tr>
+        <td><span class="pill engine">engine</span></td>
+        <td><code>desk.engine</code></td>
+        <td><code>:config</code></td>
+        <td><code>prices</code>, <code>clients</code>, <code>running</code>, <code>thread</code></td>
+      </tr>
+      <tr>
+        <td><span class="pill pedestal">pedestal</span></td>
+        <td><code>desk.server</code> + <code>desk.service</code></td>
+        <td><code>:config</code>, <code>:engine</code></td>
+        <td><code>runtime</code> (started Jetty server)</td>
+      </tr>
+    </table>
+  </div>
+
+  <footer>desk.system · src/clj/desk · read directly from the working tree, not reconstructed from memory</footer>
+
+</div>
