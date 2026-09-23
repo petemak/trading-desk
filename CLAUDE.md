@@ -47,6 +47,27 @@ Use `(m/explain schema value)` + `malli.error/humanize` for error
 messages, never a bare `(m/validate ...)` boolean when the failure
 needs to be shown to a person.
 
+## Action dispatch (Replicant)
+
+Interactive elements stay data, not closures, so view render functions
+stay pure: `:on {:click actions}` where `actions` is a **vector of
+action vectors**, e.g. `[[:action/place-order order-data]]`, never a
+plain function. `src/cljs/desk/core.cljs` (app entry point,
+orchestrator-maintained — not owned by any single build agent) wires
+this up:
+
+- `replicant.dom/set-dispatch!` registers one global fn that receives
+  every such `actions` vector and forwards each action to
+  `desk.core/handle-action!`, a multimethod dispatching on the
+  action's first element (`(fn [_event action] (first action))`).
+- A view namespace **extends** `handle-action!` with its own
+  `defmethod` from its own file (e.g. `(defmethod core/handle-action!
+  :action/place-order [_event [_ order]] ...)`) — it never needs
+  `core.cljs` itself edited to add a new action.
+- `core.cljs` also re-renders on every `desk.db/conn` transaction via
+  `d/listen!`, so an action handler's `d/transact!` call is enough to
+  trigger a UI update.
+
 ## Persistence
 
 Serialize with `(pr-str @conn)` to `localStorage` key `"desk-db"`;

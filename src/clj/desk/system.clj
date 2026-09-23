@@ -29,6 +29,7 @@
   system in a malformed shape."
   [cfg]
   (if (m/validate schema/Config cfg)
+    cfg
     (let [errors (me/humanize (m/explain schema/Config cfg))]
       (throw (ex-info (str "Invalid config: " (pr-str errors))
                        {:errors errors :config cfg})))))

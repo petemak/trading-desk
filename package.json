@@ -1,6 +1,7 @@
 {
   "devDependencies": {
     "@tailwindcss/cli": "^4.3.3",
-    "tailwindcss": "^4.3.3"
+    "tailwindcss": "^4.3.3",
+    "shadow-cljs": "2.28.10"
   }
 }

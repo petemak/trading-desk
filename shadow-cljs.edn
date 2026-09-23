@@ -1,0 +1,25 @@
+;; ClojureScript build config. Uses deps.edn (via the :cljs alias, which
+;; adds shadow-cljs itself to the classpath) instead of its own
+;; dependency management -- see :deps below.
+;; In :deps mode, shadow-cljs' classpath comes entirely from deps.edn --
+;; test/cljs is on it via the :cljs alias's :extra-paths there, not
+;; anything configured here.
+{:deps {:aliases [:cljs]}
+
+ :builds {;; Browser build: mounts desk.core/init into public/index.html's
+          ;; #app div. `npx shadow-cljs watch app` serves public/ over
+          ;; :dev-http and recompiles on save.
+          :app {:target :browser
+                :output-dir "public/js"
+                :asset-path "/js"
+                :modules  {:main {:init-fn desk.core/init}}
+                :dev-http {8891 "public"}}
+
+          ;; Node-based test runner: every test/cljs/**/*_test.cljs namespace
+          ;; matching CLAUDE.md's `-test` suffix convention, auto-discovered.
+          ;; `npx shadow-cljs compile test && node target/node-tests.js` runs
+          ;; the whole cljs suite headlessly, no browser needed.
+          :test {:target :node-test
+                 :output-to "target/node-tests.js"
+                 :ns-regexp "-test$"
+                 :autorun true}}}
